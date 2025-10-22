@@ -3,7 +3,8 @@ import pyautogui
 import time
 from pynput import keyboard
 from threading import Thread
-import e
+import eliminate
+
 # 全局控制变量
 running = False
 clicking = False  # 防止重复启动多个线程
@@ -42,37 +43,29 @@ def auto_click_loop():
     """自动点击循环"""
     global running, clicking
     print("💡 点击线程已启动，等待启动信号...")
-    last_mat = None
     while True:
         img = recognize.screenshot_window("《星际争霸II》")
         if img:
             mat = recognize.convert_image_to_mat(img)
-            if mats_equal(mat, last_mat):
-                last_mat = None  # 重置，等待新状态
-                time.sleep(0.05)  # 给动画时间
-                # e.print_board(mat)
-                best_move, _, _ = e.find_best_move(mat)
-                target_coordinates = best_move
-                if running and target_coordinates:
-                    (x1, y1), (x2, y2) = target_coordinates
-                    print(f'🖱️ 执行点击: ({x1}, {y1}) <-> ({x2}, {y2})')
-                    x1, y1 = transform_to_screen_coords(x1, y1)
-                    x2, y2 = transform_to_screen_coords(x2, y2)
-                    pyautogui.click(x=x1, y=y1)
-                    time.sleep(0.03)  # 小延迟，避免太快
-                    pyautogui.click(x=x2, y=y2)
-
-                    # 控制点击频率（每秒约5次）
-                    time.sleep(0.03)
-                else:
-                    # 暂停状态，减少CPU占用
-                    time.sleep(0.1)
+            # e.print_board(mat)
+            best_move, _, _ = eliminate.find_best_move(mat)
+            target_coordinates = best_move
+            if running and target_coordinates:
+                (x1, y1), (x2, y2) = target_coordinates
+                print(f'🖱️ 执行点击: ({x1}, {y1}) <-> ({x2}, {y2})')
+                x1, y1 = transform_to_screen_coords(x1, y1)
+                x2, y2 = transform_to_screen_coords(x2, y2)
+                pyautogui.click(x=x1, y=y1)
+                time.sleep(0.03)  # 小延迟，避免太快
+                pyautogui.click(x=x2, y=y2)
+                # 控制点击频率（每秒约5次）
+                time.sleep(0.03)
             else:
-                last_mat = mat
-                best_move = (0, 0), (0, 0)  # 无效移动，等待下一次检测
-                target_coordinates = best_move
+                # 暂停状态，减少CPU占用
+                time.sleep(0.1)
         else:
-            print("\n没有找到有效的消除移动")
+            print("\n没有找到窗口")
+            break
 
 
 def on_press(key):
@@ -86,7 +79,10 @@ def on_press(key):
                 print("🟢 自动点击已启动 (F1)")
                 if not clicking:
                     start_clicking_thread()
-
+        elif getattr(key, "char", None) and key.char.lower() in ("x", "c", "v", "b"):
+            if running:
+                running = False
+                print("🟡 自动点击已暂停 (X/C/V/B)")
         elif key == keyboard.Key.f2:
             if running:
                 running = False
