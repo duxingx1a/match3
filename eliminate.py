@@ -3,7 +3,7 @@ import recognize
 from PIL import Image, ImageDraw, ImageFont
 
 
-def find_best_move(matrix: np.ndarray, simulations: int = 3) -> tuple[tuple[tuple[int, int], tuple[int, int]], int, int]:
+def find_best_move(matrix: np.ndarray, simulations: int = 3) -> tuple[tuple[tuple[int, int], tuple[int, int]], int, int, int]:
     """找出能引发最长连锁的最佳交换
     
     评分 = (连锁轮数 * 10 + 总消除数)  # 权重确保连锁优先
@@ -22,7 +22,7 @@ def find_best_move(matrix: np.ndarray, simulations: int = 3) -> tuple[tuple[tupl
     best_score = -1
     best_elim = 0
     best_chain = 0
-
+    total_moves = 0
     # 遍历所有可能的相邻交换
     for i in range(rows):
         for j in range(cols):
@@ -30,7 +30,7 @@ def find_best_move(matrix: np.ndarray, simulations: int = 3) -> tuple[tuple[tupl
             if j < cols - 1:
                 max_elim, max_chain = evaluate_move_expectation(matrix, i, j, i, j + 1, simulations)
                 score = max_elim + max_chain * 10  # 连锁优先
-
+                total_moves += 1 if max_chain > 0 else 0 # 仅计入有效移动
                 if score > best_score and max_chain > 0:
                     best_score = score
                     best_move = ((i, j), (i, j + 1))
@@ -41,14 +41,13 @@ def find_best_move(matrix: np.ndarray, simulations: int = 3) -> tuple[tuple[tupl
             if i < rows - 1:
                 max_elim, max_chain = evaluate_move_expectation(matrix, i, j, i + 1, j, simulations)
                 score = max_elim + max_chain * 10
-
+                total_moves += 1 if max_chain > 0 else 0 # 仅计入有效移动
                 if score > best_score and max_chain > 0:
                     best_score = score
                     best_move = ((i, j), (i + 1, j))
                     best_elim = max_elim
                     best_chain = max_chain
-
-    return best_move, best_elim, best_chain
+    return best_move, best_elim, best_chain, total_moves
 
 
 def evaluate_move_expectation(matrix: np.ndarray, r1: int, c1: int, r2: int, c2: int, simulations: int = 3) -> tuple[int, int]:
@@ -281,7 +280,7 @@ if __name__ == "__main__":
         #print(matrix)
 
 
-    best_move, avg_elim, avg_chain = find_best_move(matrix, simulations=1)
+    best_move, avg_elim, avg_chain, total_moves = find_best_move(matrix, simulations=3)
 
     if best_move:
         (r1, c1), (r2, c2) = best_move
@@ -302,3 +301,4 @@ if __name__ == "__main__":
         img_with_mark = img.copy()  # 保留原图
         draw_best_move_on_board_image(img_with_mark, best_move)
         img_with_mark.show()  # 显示结果
+        print(total_moves)

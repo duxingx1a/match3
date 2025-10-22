@@ -7,6 +7,7 @@ import cv2
 import os
 import numpy as np
 from typing import Optional
+import matplotlib.pyplot as plt
 # 启用 DPI 感知（Windows 10 及以上）
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
@@ -16,6 +17,7 @@ except Exception as e:
 
 def screenshot_window(title_keyword: str) -> Optional[Image.Image]:
     """截取指定标题关键字的窗口截图
+    
     参数:
         title_keyword: 窗口标题关键字
     返回:
@@ -62,24 +64,21 @@ def screenshot_window(title_keyword: str) -> Optional[Image.Image]:
 
 
 def preprocess_image(image_array: np.ndarray) -> np.ndarray:
-    """对图像进行预处理，转换为灰度并应用高斯模糊
+    """对图像进行预处理，转换为灰度并应用高斯模糊，便于匹配模板
+    
     参数:
         image_array: 输入的图像数组
     返回:
         预处理后的图像数组
     """
-    if len(image_array.shape) > 2 and image_array.shape[2] == 3:
-        gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image_array
-    # 高斯模糊
+    gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY) if len(image_array.shape) > 2 and image_array.shape[2] == 3 else image_array
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
     return blurred
 
 
 def convert_image_to_mat(image: Image.Image) -> np.ndarray:
     """将PIL图像转换为棋盘矩阵表示
+    
     参数:
         image: PIL Image 对象
     返回:
@@ -120,10 +119,8 @@ def convert_image_to_mat(image: Image.Image) -> np.ndarray:
 
             # 截取50x50的中间区域
             tile = gray[y:y + crop_size, x:x + crop_size]
-
             # 预处理
             tile = preprocess_image(tile)
-
             # 模板匹配
             best_match = ''
             best_match_value = 0.0
@@ -135,15 +132,12 @@ def convert_image_to_mat(image: Image.Image) -> np.ndarray:
                 # 进行模板匹配
                 result = cv2.matchTemplate(tile, template, cv2.TM_CCOEFF_NORMED)
                 min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-
                 # 保存最佳匹配结果
                 if max_val > best_match_value:
                     best_match_value = max_val
                     best_match = color
-
             # 如果最佳匹配值大于阈值，则记录匹配结果,7代表未识别到
             board[i, j] = color_ids[best_match] if best_match_value > 0.5 else 7
-
     return board
 
 
@@ -168,16 +162,12 @@ def reconstruct_board_image(matrix: np.ndarray) -> Image.Image:
         6: 'yellow.png',
     }
 
-    # 默认 fallback 图像（用于 7 或缺失模板）
     fallback_color = (200, 200, 200)  # 灰色
     fallback_image = Image.new('RGB', (96, 96), fallback_color)
-    # 可选：加一个 "?" 文字提示（需要PIL的ImageDraw和字体支持）
 
     # 创建空白大图（768x768）
     board_image = Image.new('RGB', (768, 768))
-
     template_dir = 'template'
-
     for i in range(8):  # 行
         for j in range(8):  # 列
             value = matrix[i, j]
@@ -204,18 +194,43 @@ def reconstruct_board_image(matrix: np.ndarray) -> Image.Image:
 
     return board_image
 
+def show_image(img: Image.Image, title: str = "Image", figsize=(8, 8), cmap=None):
+    """
+    使用 matplotlib 显示 PIL 图像
+    参数:
+        img: PIL Image 对象
+        title: 图像标题
+        figsize: 图像显示大小
+        cmap: 颜色映射（如灰度图用 'gray'）
+    """
+    plt.figure(figsize=figsize)
+    plt.imshow(img, cmap=cmap)
+    plt.title(title, fontsize=14)
+    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
-    # 示例：截图标题包含“Mirror”的窗口
     img = screenshot_window("《星际争霸II》")
     if img:
-        img.show()  # 显示截图
         mat = convert_image_to_mat(img)
-        print(mat)
-        formatted_matrix = ',\n    '.join('[' + ', '.join(map(str, row)) + ']' for row in mat)
+        # print("识别出的棋盘矩阵：")
+        # formatted_matrix = ',\n    '.join('[' + ', '.join(map(str, row)) + ']' for row in mat)
+        # print("\nmatrix = [")
+        # print("    " + formatted_matrix + ",")
+        # print("]")
 
-        # 打印格式化后的字符串
-        print("matrix = [")
-        print("    " + formatted_matrix + ",")
-        print("]")
-        reconstruct_board_image(mat).show()  # 显示重建的棋盘图像
+        # 重建棋盘图像
+        reconstructed_img = reconstruct_board_image(mat)
+        fig, axes = plt.subplots(1, 2, figsize=(16, 8))  # 宽图，适合左右布局
+        axes[0].imshow(img)
+        axes[0].set_title("original", fontsize=14, fontweight='bold')
+        axes[0].axis('off')
+
+        axes[1].imshow(reconstructed_img)
+        axes[1].set_title("reconstructed", fontsize=14, fontweight='bold')
+        axes[1].axis('off')
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.9)  # 调整上方间距，避免重叠
+        plt.show()
