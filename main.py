@@ -1,12 +1,10 @@
-import win32con
-import win32gui
-from matplotlib import pyplot as plt
-import recognize
+import win32con, win32gui
 import pyautogui
 import time
 from pynput import keyboard
 from threading import Thread
 import eliminate
+import recognize
 
 # 全局控制变量
 running = False
@@ -29,7 +27,6 @@ def transform_to_screen_coords(r, c, left, top, cell_size):
     返回:
         (x, y): 屏幕上的像素坐标（中心点）
     """
-    print(left, top, cell_size)
     x = left + c * cell_size + cell_size // 2
     y = top + r * cell_size + cell_size // 2
     return x, y
@@ -40,42 +37,39 @@ def auto_click_loop():
     global running, clicking, should_exit
     print("💡 点击线程已启动，等待启动信号...")
     while True:
-        img, left, top, right, bottom = recognize.screenshot_window("《星际争霸II》")
-        if img:
-            # ****** 取棋盘实际屏幕坐标 ******
-            cell_size = (right - left) // 8  # 自动适配任意分辨率
-            mat = recognize.convert_image_to_mat(img)
-            # eliminate.print_board(mat)
-            best_move, best_elim, best_chain, total_moves = eliminate.find_best_move(mat)
-            if running and best_move:
-                (r1, c1), (r2, c2) = best_move
-                x1, y1 = transform_to_screen_coords(r1, c1, left, top, cell_size)
-                x2, y2 = transform_to_screen_coords(r2, c2, left, top, cell_size)
-                print(f'🖱️ 执行点击: ({r1},{c1})->({r2},{c2})  屏幕({x1},{y1})<->({x2},{y2})')
-                print(f'预计消除: {best_elim}, 连锁: {best_chain}, 可移动方块数量: {total_moves}')
-                pyautogui.click(x=x1, y=y1)
-                time.sleep(0.03)  # 小延迟，避免太快
-                pyautogui.click(x=x2, y=y2)
-                # 控制点击频率（每秒约5次）
-                time.sleep(0.03)
-            else:
-
-                # 暂停状态，减少CPU占用
-                time.sleep(0.1)
-        else:
+        img, window_location = recognize.screenshot_window("《星际争霸II》")
+        if not img or not window_location:
             print("\n没有找到窗口")
             break
+        left, top, right, bottom = window_location
+        cell_size = (right - left) // 8  # 自动适配任意分辨率
+        mat = recognize.convert_image_to_mat(img)
+        best_move, best_elim, best_chain, total_moves = eliminate.find_best_move(mat,1)
+        if running and best_move:
+            (r1, c1), (r2, c2) = best_move
+            x1, y1 = transform_to_screen_coords(r1, c1, left, top, cell_size)
+            x2, y2 = transform_to_screen_coords(r2, c2, left, top, cell_size)
+            print(f'🖱️ 执行点击: ({r1},{c1})->({r2},{c2})  屏幕({x1},{y1})<->({x2},{y2})')
+            print(f'预计消除方块: {best_elim}, 连锁: {best_chain}, 可移动方块数量: {total_moves}')
+            pyautogui.click(x=x1, y=y1)
+            time.sleep(0.05)  # 小延迟，避免太快
+            pyautogui.click(x=x2, y=y2)
+            # 控制点击频率（每秒约5次）
+            time.sleep(0.05)
+        else:
+            # 暂停状态，减少CPU占用
+            time.sleep(0.1)
 
 def single_move():
     """按 F3 只执行一次最优交换"""
-    img, left, top, right, bottom = recognize.screenshot_window("《星际争霸II》")
-    if not img:
-        print("❌ 未找到窗口，单次移动取消")
+    img, window_location = recognize.screenshot_window("《星际争霸II》")
+    if not window_location or not img:
+        print("\n没有找到窗口")
         return
-
+    left, top, right, bottom = window_location
     cell_size = (right - left) // 8
     mat = recognize.convert_image_to_mat(img)
-    best_move, best_elim, best_chain, total_moves = eliminate.find_best_move(mat)
+    best_move, best_elim, best_chain, total_moves = eliminate.find_best_move(mat,1)
     if not best_move:
         print("🚫 棋盘无可用移动")
         return
@@ -85,10 +79,11 @@ def single_move():
     x2, y2 = transform_to_screen_coords(r2, c2, left, top, cell_size)
 
     print(f'🔧 F3 单次点击: ({r1},{c1})<->({r2},{c2})  屏幕({x1},{y1})<->({x2},{y2})')
-    print(f'预计消除: {best_elim}, 连锁: {best_chain}, 可移动方块数量: {total_moves}')
+    print(f'预计消除方块: {best_elim}, 连锁: {best_chain}, 可移动方块数量: {total_moves}')
     pyautogui.click(x1, y1)
     time.sleep(0.05)
     pyautogui.click(x2, y2)
+
 
 def on_press(key):
     """键盘监听回调函数"""
@@ -108,7 +103,7 @@ def on_press(key):
                 time.sleep(0.3)  # 等待半秒，确保先前鼠标移动完成
                 # 2K 母版尺寸 & 硬编码偏移
                 BASE_W, BASE_H = 2560, 1440
-                BASE_X, BASE_Y = 940, 700          # 2K 下想去的点
+                BASE_X, BASE_Y = 940, 700  # 2K 下想去的点
 
                 # 取当前客户区宽高（不额外返回值，只内部再抓一次）
                 hwnd = win32gui.FindWindow(None, None)
@@ -127,7 +122,7 @@ def on_press(key):
         elif key == keyboard.Key.f2:
             should_exit = True
             print("🟡 自动点击已结束 (F2)")
-        elif key == keyboard.Key.f3:          # ← 新增
+        elif key == keyboard.Key.f3:  # ← 新增
             single_move()
     except AttributeError:
         pass

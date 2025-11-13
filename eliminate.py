@@ -30,7 +30,7 @@ def find_best_move(matrix: np.ndarray, simulations: int = 3) -> tuple[tuple[tupl
             if j < cols - 1:
                 max_elim, max_chain = evaluate_move_expectation(matrix, i, j, i, j + 1, simulations)
                 score = max_elim + max_chain * 10  # 连锁优先
-                total_moves += 1 if max_chain > 0 else 0 # 仅计入有效移动
+                total_moves += 1 if max_chain > 0 else 0  # 仅计入有效移动
                 if score > best_score and max_chain > 0:
                     best_score = score
                     best_move = ((i, j), (i, j + 1))
@@ -41,7 +41,7 @@ def find_best_move(matrix: np.ndarray, simulations: int = 3) -> tuple[tuple[tupl
             if i < rows - 1:
                 max_elim, max_chain = evaluate_move_expectation(matrix, i, j, i + 1, j, simulations)
                 score = max_elim + max_chain * 10
-                total_moves += 1 if max_chain > 0 else 0 # 仅计入有效移动
+                total_moves += 1 if max_chain > 0 else 0  # 仅计入有效移动
                 if score > best_score and max_chain > 0:
                     best_score = score
                     best_move = ((i, j), (i + 1, j))
@@ -65,7 +65,7 @@ def evaluate_move_expectation(matrix: np.ndarray, r1: int, c1: int, r2: int, c2:
     max_chain = 0
     max_elim = 0
     for i in range(simulations):
-        elim, chain = simulate_swap(matrix, r1, c1, r2, c2, seed=i)
+        elim, chain = simulate_swap(matrix, r1, c1, r2, c2, seed=i*i*17236 + 12345)
         max_elim = max(max_elim, elim)
         max_chain = max(max_chain, chain)
 
@@ -106,7 +106,7 @@ def find_and_eliminate(board: np.ndarray) -> int:
     """查找并消除水平和垂直方向上连续3个或以上的相同方块
     
     参数：
-        board: 棋盘矩阵
+        board: 棋盘矩阵（0 代表已空）
     返回：
         本次消除的方块数量
     """
@@ -164,7 +164,6 @@ def simulate_fall(board: np.ndarray, seed: int = 0) -> None:
         seed: 随机种子，默认为0
     """
     rows, cols = board.shape
-    np.random.seed(seed)
     for j in range(cols):
         # 收集该列非零元素，从底部排列
         col_vals = []
@@ -223,8 +222,8 @@ def visualize_move(matrix, move):
     return total_eliminated, chain_count
 
 
-def draw_best_move_on_board_image(img: Image.Image, best_move: tuple) -> Image.Image:
-    """在 768x768 的棋盘图像上绘制最佳移动
+def draw_best_move_on_board_image(img: Image.Image, best_move: tuple, block: int) -> Image.Image:
+    """在动态尺寸棋盘图上绘制最佳移动箭头与圆圈，方便调试。
     
     用于调试是否识别正确。
     
@@ -246,41 +245,32 @@ def draw_best_move_on_board_image(img: Image.Image, best_move: tuple) -> Image.I
     MARK_COLOR = (255, 0, 0)  # 红色标记
     ARROW_COLOR = (255, 255, 0)  # 黄色箭头
 
-    cell_w, cell_h = 96, 96  # 768 / 8 = 96
+    cell_w, cell_h = block, block  # 动态尺寸
 
     if best_move:
         (r1, c1), (r2, c2) = best_move
-
-        # --- 1. 计算中心点 ---
-        x1 = c1 * cell_w + cell_w // 2
-        y1 = r1 * cell_h + cell_h // 2
-        x2 = c2 * cell_w + cell_w // 2
-        y2 = r2 * cell_h + cell_h // 2
+        x1, y1 = c1 * block + block // 2, r1 * block + block // 2
+        x2, y2 = c2 * block + block // 2, r2 * block + block // 2
 
         # --- 2. 画红圈标记 ---
-        radius = 20
-        draw.ellipse([(x1 - radius, y1 - radius), (x1 + radius, y1 + radius)], outline=MARK_COLOR, width=4, fill=None)
-        draw.ellipse([(x2 - radius, y2 - radius), (x2 + radius, y2 + radius)], outline=MARK_COLOR, width=4, fill=None)
+        mark_radius = max(20, block // 12)
+        draw.ellipse([(x1 - mark_radius, y1 - mark_radius), (x1 + mark_radius, y1 + mark_radius)], outline=(255, 0, 0), width=3)
+        draw.ellipse([(x2 - mark_radius, y2 - mark_radius), (x2 + mark_radius, y2 + mark_radius)], outline=(255, 0, 0), width=3)
 
-        # --- 3. 画双向箭头 ---
-        # Pillow 不支持直接画箭头，我们用 line + text 模拟
-        draw.line([(x1, y1), (x2, y2)], fill=ARROW_COLOR, width=5)
-
-        # --- 4. 标注文字 ---
-        draw.text((x1 - 40, y1 - 40), "Start", fill=MARK_COLOR, font=font, stroke_fill=(255, 255, 255), stroke_width=2)
-        draw.text((x2 - 30, y2 - 40), "End", fill=MARK_COLOR, font=font, stroke_fill=(255, 255, 255), stroke_width=2)
+        draw.line([(x1, y1), (x2, y2)], fill=(255, 255, 0), width=max(2, block // 24))
+        draw.text((x1 - 20, y1 - 20), "Start", fill=(255, 0, 0), font=font, stroke_fill=(255, 255, 255), stroke_width=2)
+        draw.text((x2 - 15, y2 - 20), "End", fill=(255, 0, 0), font=font, stroke_fill=(255, 255, 255), stroke_width=2)
 
     return img
 
 
 if __name__ == "__main__":
-    img = recognize.screenshot_window("《星际争霸II》")
+    img, _ = recognize.screenshot_window("《星际争霸II》", debug=True)
     if img:
         matrix = recognize.convert_image_to_mat(img)
         #print(matrix)
 
-
-    best_move, avg_elim, avg_chain, total_moves = find_best_move(matrix, simulations=3)
+    best_move, avg_elim, avg_chain, total_moves = find_best_move(matrix, simulations=1)
 
     if best_move:
         (r1, c1), (r2, c2) = best_move
@@ -298,7 +288,8 @@ if __name__ == "__main__":
     else:
         print("\n没有找到有效的消除移动")
     if img:
+        block = img.height // 8
         img_with_mark = img.copy()  # 保留原图
-        draw_best_move_on_board_image(img_with_mark, best_move)
+        draw_best_move_on_board_image(img_with_mark, best_move, block)
         img_with_mark.show()  # 显示结果
         print(total_moves)
