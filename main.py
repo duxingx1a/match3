@@ -96,7 +96,8 @@ def on_press(key):
                 print("🟢 自动点击已启动 (Space)")
                 if not clicking:
                     start_clicking_thread()
-        elif getattr(key, "char", None) and key.char.lower() in ("x", "c", "v", "b"):
+        
+        elif getattr(key, "char", None) and key.char.lower() in ("x", "c", "v", "b") or key == keyboard.Key.esc:
             if running:
                 running = False
                 print("🟡 自动点击已暂停 (X/C/V/B)")
