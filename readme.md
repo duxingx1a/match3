@@ -2,6 +2,14 @@
 
 一个基于 Python 的自动化工具，用于《星际争霸II》中的消除类小游戏。
 ✅ 已支持 1080P / 2K / 4K 全分辨率——无需固定坐标，无需模板缩放，一次配置即可随换显示器/缩放比例自动适配。
+## 快速开始
+
+| 方式 | 步骤 |
+|---|---|
+| **一键启动（推荐）** | 1. 在 [Release 页面](https://github.com/duxingx1a/match3/releases) 下载最新 `match3.zip`<br>2. 解压后双击 `start.bat` 即可运行 |
+| **源码运行** | 1. 克隆仓库<br>2. `pip install -r requirements.txt`<br>3. `python main.py` |
+
+
 
 ## 功能特性
 
@@ -44,11 +52,12 @@ pip install -r requirements.txt
 ```
 
 依赖包含:
+- `matplotlib==3.10.7` - 图表绘制（调试用）
 - `numpy==2.3.4` - 数组计算
 - `Pillow==12.0.0` - 图像操作
 - `PyAutoGUI==0.9.54` - 鼠标控制
-- `pynput==1.7.7` - 键盘监听
-- `pywin32==305.1` - Windows API 调用
+- `pynput==1.8.1` - 键盘监听
+- `pywin32==311` - Windows API 调用
 
 1. **准备模板图像**
 
