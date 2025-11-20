@@ -5,7 +5,7 @@ from pynput import keyboard
 from threading import Thread
 import eliminate
 import recognize
-
+import tkinter as tk
 # 全局控制变量
 running = False
 clicking = False  # 防止重复启动多个线程
@@ -121,7 +121,9 @@ def on_press(key):
                     pyautogui.moveTo(target_x, target_y)
 
         elif key == keyboard.Key.f2:
+            import os, signal
             should_exit = True
+            os.kill(os.getpid(), signal.SIGTERM)   # 立即结束自己
             print("🟡 自动点击已结束 (F2)")
         elif key == keyboard.Key.f3:  # ← 新增
             single_move()
@@ -139,17 +141,59 @@ def start_clicking_thread():
 
 
 def main():
-    print("🎮 自动点击程序已启动")
-    print("📌 按 Space 开始自动点击")
-    print("⏸️ 按 X/C/V/B 暂停自动点击")
-    print("❌ 按 F2 退出程序")
-    print("🔧 按 F3 执行一次单次移动")
-    print("❌ 按 Ctrl+C 退出程序（终端）")
+    
 
-    # 启动键盘监听
-    listener = keyboard.Listener(on_press=on_press)
+    # -------------------- 窗口本体 --------------------
+    root = tk.Tk()
+    root.title('')
+    root.geometry('300x160+0+0')          # 初始左上角
+    root.wm_attributes('-topmost', 1)     # 置顶
+    root.wm_attributes('-alpha', 0.85)    # 半透明
+    root.overrideredirect(True)           # 去掉标题栏/关闭按钮
+    root.configure(bg='#303030')
+
+    # 屏蔽 Alt+F4
+    root.protocol('WM_DELETE_WINDOW', lambda: None)
+
+    # -------------------- 拖动逻辑 --------------------
+    def start_drag(event):
+        """记录鼠标按下时相对窗口左上角的偏移"""
+        root._offset_x = event.x
+        root._offset_y = event.y
+
+    def on_drag(event):
+        """实时计算并移动窗口"""
+        new_x = root.winfo_pointerx() - root._offset_x
+        new_y = root.winfo_pointery() - root._offset_y
+        root.geometry(f'+{new_x}+{new_y}')
+
+    root.bind('<Button-1>', start_drag)
+    root.bind('<B1-Motion>', on_drag)
+
+    # -------------------- 按键说明 --------------------
+    lines = [
+        'Space  开始自动点击',
+        'X/C/V/B/ESC  暂停',
+        'F3     执行一次移动',
+        'F2     退出程序'
+    ]
+    for txt in lines:
+        tk.Label(root, text=txt, fg='white', bg='#303030',
+                 anchor='w', font=('Consolas', 10)).pack(fill='x', padx=10, pady=3)
+
+    print("自动点击程序已启动")
+    print("按 Space 开始自动点击")
+    print("按 X/C/V/B/ESC暂停自动点击")
+    print("按 F2 退出程序")
+    print("按 F3 执行一次单次移动")
+    print("按 Ctrl+C 退出程序（终端）")
+
+    # -------------------- 键盘监听放后台 --------------------
+    listener = keyboard.Listener(on_press=on_press, daemon=True)
     listener.start()
 
+    # -------------------- 主线程跑 GUI --------------------
+    root.mainloop()
     # 保持主程序运行
     try:
         while True:
