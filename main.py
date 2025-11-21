@@ -1,3 +1,4 @@
+from os import error
 import win32con, win32gui
 import pyautogui
 import time
@@ -6,11 +7,13 @@ from threading import Thread
 import eliminate
 import recognize
 import tkinter as tk
+import os, signal
 # 全局控制变量
 running = False
 clicking = False  # 防止重复启动多个线程
 should_exit = False
 target_coordinates = ((0, 0), (0, 0))
+error_label: tk.Label | None = None
 
 
 def transform_to_screen_coords(r, c, left, top, cell_size):
@@ -34,7 +37,7 @@ def transform_to_screen_coords(r, c, left, top, cell_size):
 
 def auto_click_loop():
     """自动点击循环"""
-    global running, clicking, should_exit
+    global running, clicking, should_exit, error_label
     print("💡 点击线程已启动，等待启动信号...")
     while True:
         img, window_location = recognize.screenshot_window("《星际争霸II》")
@@ -42,9 +45,23 @@ def auto_click_loop():
             print("\n没有找到窗口")
             break
         left, top, right, bottom = window_location
-        cell_size = (right - left) // 8  # 自动适配任意分辨率
+        width = right - left
+        # --- 分辨率检查 ---
+        standard_resolutions = (576, 768, 1152)
+        if error_label:
+            if width not in standard_resolutions:
+                left, top, right, bottom=recognize.get_resolution(recognize.get_hwnd("《星际争霸II》"))
+                # 更新错误信息标签
+                width = right - left
+                height = bottom - top
+                error_label.config(text=f"不支持当前分辨率{width}x{height}, 支持的分辨率包括1080p、2K、4K。\n程序将在5秒后自动退出", fg='red')
+                # 结束此函数，不再继续执
+                time.sleep(5)
+                os.kill(os.getpid(), signal.SIGTERM)
+            
+        cell_size = (width) // 8  # 自动适配任意分辨率
         mat = recognize.convert_image_to_mat(img)
-        best_move, best_elim, best_chain, total_moves = eliminate.find_best_move(mat,1)
+        best_move, best_elim, best_chain, total_moves = eliminate.find_best_move(mat, 1)
         if running and best_move:
             (r1, c1), (r2, c2) = best_move
             x1, y1 = transform_to_screen_coords(r1, c1, left, top, cell_size)
@@ -57,8 +74,13 @@ def auto_click_loop():
             # 控制点击频率（每秒约5次）
             time.sleep(0.05)
         else:
+            if error_label:
+                if not running:
+                    error_label.config(text="已暂停", fg='yellow')
+                    
             # 暂停状态，减少CPU占用
             time.sleep(0.1)
+    
 
 def single_move():
     """按 F3 只执行一次最优交换"""
@@ -69,7 +91,7 @@ def single_move():
     left, top, right, bottom = window_location
     cell_size = (right - left) // 8
     mat = recognize.convert_image_to_mat(img)
-    best_move, best_elim, best_chain, total_moves = eliminate.find_best_move(mat,1)
+    best_move, best_elim, best_chain, total_moves = eliminate.find_best_move(mat, 1)
     if not best_move:
         print("🚫 棋盘无可用移动")
         return
@@ -93,14 +115,18 @@ def on_press(key):
         if key == keyboard.Key.space:
             if not running:
                 running = True
-                print("🟢 自动点击已启动 (Space)")
+                print("自动点击已启动 (Space)")
+                if error_label:
+                    error_label.config(text="正在运行...", fg='cyan') # 或 'blue', 'lightgreen'
                 if not clicking:
                     start_clicking_thread()
-        
+
         elif getattr(key, "char", None) and key.char.lower() in ("x", "c", "v", "b") or key == keyboard.Key.esc:
             if running:
                 running = False
-                print("🟡 自动点击已暂停 (X/C/V/B)")
+                print("自动点击已暂停 (X/C/V/B)")
+                if error_label:
+                    error_label.config(text="已暂停", fg='yellow')
                 time.sleep(0.3)  # 等待半秒，确保先前鼠标移动完成
                 # 2K 母版尺寸 & 硬编码偏移
                 BASE_W, BASE_H = 2560, 1440
@@ -123,8 +149,8 @@ def on_press(key):
         elif key == keyboard.Key.f2:
             import os, signal
             should_exit = True
-            os.kill(os.getpid(), signal.SIGTERM)   # 立即结束自己
-            print("🟡 自动点击已结束 (F2)")
+            os.kill(os.getpid(), signal.SIGTERM)  # 立即结束自己
+            print("自动点击已结束 (F2)")
         elif key == keyboard.Key.f3:  # ← 新增
             single_move()
     except AttributeError:
@@ -141,45 +167,47 @@ def start_clicking_thread():
 
 
 def main():
-    
-
+    global error_label
     # -------------------- 窗口本体 --------------------
     root = tk.Tk()
     root.title('')
-    root.geometry('300x160+0+0')          # 初始左上角
-    root.wm_attributes('-topmost', 1)     # 置顶
-    root.wm_attributes('-alpha', 0.85)    # 半透明
-    root.overrideredirect(True)           # 去掉标题栏/关闭按钮
+    root.geometry('300x200+100+400')  # 初始左上角
+    root.wm_attributes('-topmost', 1)  # 置顶
+    root.wm_attributes('-alpha', 0.85)  # 半透明
+    root.overrideredirect(True)  # 去掉标题栏/关闭按钮
     root.configure(bg='#303030')
-
     # 屏蔽 Alt+F4
     root.protocol('WM_DELETE_WINDOW', lambda: None)
 
     # -------------------- 拖动逻辑 --------------------
     def start_drag(event):
         """记录鼠标按下时相对窗口左上角的偏移"""
-        root._offset_x = event.x
-        root._offset_y = event.y
+        root._offset_x = event.x  # type: ignore
+        root._offset_y = event.y  # type: ignore
 
     def on_drag(event):
         """实时计算并移动窗口"""
-        new_x = root.winfo_pointerx() - root._offset_x
-        new_y = root.winfo_pointery() - root._offset_y
+        new_x = root.winfo_pointerx() - root._offset_x  # type: ignore
+        new_y = root.winfo_pointery() - root._offset_y  # type: ignore
         root.geometry(f'+{new_x}+{new_y}')
 
     root.bind('<Button-1>', start_drag)
     root.bind('<B1-Motion>', on_drag)
-
+    error_label = tk.Label(
+        root,
+        text="准备就绪...",
+        fg='green',  # 初始为绿色
+        bg='#303030',
+        anchor='center',  # 居中对齐
+        justify='center',  # 文本居中
+        font=('Consolas', 10),  # 减小字体大小
+        wraplength=280  # 自动换行宽度
+    )
+    error_label.pack(fill='x', expand=False, padx=5, pady=(5, 0))
     # -------------------- 按键说明 --------------------
-    lines = [
-        'Space  开始自动点击',
-        'X/C/V/B/ESC  暂停',
-        'F3     执行一次移动',
-        'F2     退出程序'
-    ]
+    lines = ['Space  开始自动点击', 'X/C/V/B/ESC  暂停', 'F3     执行一次移动', 'F2     退出程序']
     for txt in lines:
-        tk.Label(root, text=txt, fg='white', bg='#303030',
-                 anchor='w', font=('Consolas', 10)).pack(fill='x', padx=10, pady=3)
+        tk.Label(root, text=txt, fg='white', bg='#303030', anchor='w', font=('Consolas', 10)).pack(fill='x', padx=10, pady=3)
 
     print("自动点击程序已启动")
     print("按 Space 开始自动点击")
@@ -198,12 +226,12 @@ def main():
     try:
         while True:
             if should_exit:
-                print("\n👋 程序正在退出...")
+                print("\n 程序正在退出...")
                 listener.stop()  # 停止键盘监听
                 break  # 退出主循环
             time.sleep(0.01)
     except KeyboardInterrupt:
-        print("\n👋 程序已退出")
+        print("\n 程序已退出")
 
 
 if __name__ == "__main__":

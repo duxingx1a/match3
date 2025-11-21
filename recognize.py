@@ -2,6 +2,7 @@
 跨分辨率（1080P/2K/4K）通用棋盘识别
 统一颜色字典 + 像素平均距离
 """
+from ctypes.wintypes import HWND
 import os
 import numpy as np
 import win32gui, win32ui, win32con
@@ -37,8 +38,35 @@ THRESHOLD = 3
 #根据以上数据计算得到：
 TEMPLATE_R = np.array([201, 146, 63, 139, 13, 120])
 
+
 # [201, 62, 14, 144, 139, 120]
 
+
+def get_hwnd(title_keyword: str = "《星际争霸II》") -> int | None:
+    """获取指定标题关键字的窗口句柄，找不到则返回 None"""
+    hwnd = win32gui.FindWindow(None, None)
+    while hwnd:
+        if title_keyword in win32gui.GetWindowText(hwnd):
+            break
+        hwnd = win32gui.GetWindow(hwnd, win32con.GW_HWNDNEXT)
+    if not hwnd:
+        print("未找到窗口")
+        return None
+    return hwnd
+
+def get_resolution(hwnd) -> Tuple[int, int, int, int]:
+    """获取指定句柄id的窗口客户区分辨率，找不到则返回 (0,0,0,0)"""
+    if not hwnd:
+        return 0, 0, 0, 0
+    rect = win32gui.GetClientRect(hwnd)
+    # 将客户区左上角 (0,0) 转换为屏幕坐标
+    point = win32gui.ClientToScreen(hwnd, (0, 0))
+    
+    left = point[0]
+    top = point[1]
+    right = left + rect[2]
+    bottom = top + rect[3]
+    return left, top, right, bottom
 
 def screenshot_window(title_keyword: str = "《星际争霸II》", debug=False) -> Tuple[Image.Image | None, Tuple[int, int, int, int] | None]:
     """截取指定标题关键字的窗口截图
@@ -51,18 +79,11 @@ def screenshot_window(title_keyword: str = "《星际争霸II》", debug=False) 
         截图的PIL Image对象，若未找到窗口则返回None
         棋盘坐标(left, top, right, bottom)，若未找到窗口则返回None
     """
-    # 找到窗口句柄
-    hwnd = win32gui.FindWindow(None, None)
-    while hwnd:
-        if title_keyword in win32gui.GetWindowText(hwnd):
-            break
-        hwnd = win32gui.GetWindow(hwnd, win32con.GW_HWNDNEXT)
-
-    if not hwnd:
-        print("未找到窗口")
-        return None, None
     # 获取实际分辨率
-    left, top, right, bottom = win32gui.GetClientRect(hwnd)
+    hwnd= get_hwnd(title_keyword)
+    if not hwnd:
+        return None, None
+    left, top, right, bottom = get_resolution(hwnd)
     cw, ch = right - left, bottom - top
     if cw == 0 or ch == 0:
         print("客户区尺寸为 0")
